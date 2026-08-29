@@ -186,6 +186,7 @@ every other service references them from here, so they are typed once.
 | `HLL_REDIS_DB` | `1` | |
 | `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/1` | |
 | `PORT` | `8000` | unused by CRCON; tells Railway which port to healthcheck |
+| `RAILWAY_HEALTHCHECK_TIMEOUT_SEC` | `1800` | healthcheck timeout; generous because the backend waits for Maintenance to finish migrations, and on a fresh 7-service deploy Maintenance can sit in Railway's build queue for several minutes (the 300s default expires and fails the deploy) |
 | `CRCON_FRONTEND_HOST` | `${{Frontend.RAILWAY_PRIVATE_DOMAIN}}` | target of the /etc/hosts `frontend_<N>` alias (see Source note) |
 | `RCONWEB_API_SECRET` | `${{secret(64)}}` | encrypts sessions/passwords; never change after first deploy |
 | `SUPERVISOR_RPC_URL` | `http://${{Supervisor.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` | lets the UI's Services page control workers |
@@ -254,11 +255,12 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
 - **Healthcheck path**: `/`
 - **Variables**:
 
-| Name | Value |
-|---|---|
-| `CRCON_API_HOST` | `${{Backend.RAILWAY_PRIVATE_DOMAIN}}` |
-| `HLL_GAME` | `${{Backend.HLL_GAME}}` |
-| `RCONWEB_EXTERNAL_ADDRESS` | `${{RAILWAY_PUBLIC_DOMAIN}}` |
+| Name | Value | Notes |
+|---|---|---|
+| `CRCON_API_HOST` | `${{Backend.RAILWAY_PRIVATE_DOMAIN}}` | |
+| `HLL_GAME` | `${{Backend.HLL_GAME}}` | |
+| `RCONWEB_EXTERNAL_ADDRESS` | `${{RAILWAY_PUBLIC_DOMAIN}}` | |
+| `PORT` | `80` | tells Railway which port to healthcheck (nginx serves the admin UI on 80); without it the healthcheck probes the wrong port and the deploy fails |
 
 ---
 
@@ -267,15 +269,21 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
 1. Postgres and Redis come up in seconds.
 2. Maintenance pulls the CRCON image, runs alembic + Django migrations
    (roughly 30-60s), then idles. It is expected to stay "running" forever.
+   On a fresh 7-service deploy it can first sit **Queued** for 5+ minutes
+   behind Railway's build queue; nothing is wrong, the rest of the stack
+   just waits longer.
 3. Backend prints `Waiting for database migrations` until step 2
    completes, then seeds the database and starts gunicorn/daphne. It
-   seeds a default web login of `admin` / `admin`.
+   seeds a default web login of `admin` / `admin`. Its healthcheck
+   timeout is raised to 1800s (`RAILWAY_HEALTHCHECK_TIMEOUT_SEC`) so the
+   wait in step 2 cannot expire the default 300s window and fail the
+   deploy.
 4. Supervisor starts its workers; a few restart until Backend is up
    (supervisord retries internally, this is normal).
-5. Frontend builds from this repo (pulls both upstream images, runs
-   collectstatic), then serves the UI. nginx exits and restarts until the
-   Backend's private DNS name resolves; one or two crash-restarts during
-   the very first deploy are normal.
+5. Frontend builds from this repo (pulls both upstream images, copies the
+   Django admin static assets), then serves the UI. nginx exits and
+   restarts until the Backend's private DNS name resolves; one or two
+   crash-restarts during the very first deploy are normal.
 
 Immediately after first login, deployers must change the `admin` password
 (admin UI → Settings, or `/admin`).
