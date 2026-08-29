@@ -162,7 +162,14 @@ every other service references them from here, so they are typed once.
   list)
 - **Start command**: none (the wrapper entrypoint defaults to `web`; a
   custom start command would bypass it)
-- **Healthcheck path**: `/api/get_version` (unauthenticated, returns 200)
+- **Healthcheck path**: none, deliberately. The backend blocks at startup
+  until Maintenance has run the migrations, and on a fresh 7-service
+  deploy Maintenance can sit in Railway's build queue for an unbounded
+  time (observed: 30+ minutes), so any finite healthcheck timeout is a
+  race; when it expires Railway kills the container and the stack stays
+  down. Without a healthcheck the deploy completes immediately and the
+  entrypoint's migration wait provides the ordering, exactly as upstream
+  compose does.
 - **Variables** (mark the first three as required user inputs with the
   given descriptions):
 
@@ -185,8 +192,7 @@ every other service references them from here, so they are typed once.
 | `HLL_REDIS_PORT` | `6379` | |
 | `HLL_REDIS_DB` | `1` | |
 | `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/1` | |
-| `PORT` | `8000` | unused by CRCON; tells Railway which port to healthcheck |
-| `RAILWAY_HEALTHCHECK_TIMEOUT_SEC` | `1800` | healthcheck timeout; generous because the backend waits for Maintenance to finish migrations, and on a fresh 7-service deploy Maintenance can sit in Railway's build queue for several minutes (the 300s default expires and fails the deploy) |
+| `PORT` | `8000` | unused by CRCON (no healthcheck on this service); harmless, kept for anyone who adds one |
 | `CRCON_FRONTEND_HOST` | `${{Frontend.RAILWAY_PRIVATE_DOMAIN}}` | target of the /etc/hosts `frontend_<N>` alias (see Source note) |
 | `RCONWEB_API_SECRET` | `${{secret(64)}}` | encrypts sessions/passwords; never change after first deploy |
 | `SUPERVISOR_RPC_URL` | `http://${{Supervisor.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` | lets the UI's Services page control workers |
@@ -274,10 +280,9 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
    just waits longer.
 3. Backend prints `Waiting for database migrations` until step 2
    completes, then seeds the database and starts gunicorn/daphne. It
-   seeds a default web login of `admin` / `admin`. Its healthcheck
-   timeout is raised to 1800s (`RAILWAY_HEALTHCHECK_TIMEOUT_SEC`) so the
-   wait in step 2 cannot expire the default 300s window and fail the
-   deploy.
+   seeds a default web login of `admin` / `admin`. It has no healthcheck
+   (see Service 5), so its deploy shows successful while it waits; the
+   log line above is how to see what it is doing.
 4. Supervisor starts its workers; a few restart until Backend is up
    (supervisord retries internally, this is normal).
 5. Frontend builds from this repo (pulls both upstream images, copies the

@@ -26,7 +26,7 @@ before editing variables, because they reference each other's domains.
 
 | New service | Source | Start command / settings |
 |---|---|---|
-| `Backend2` | this repo, root directory `/template/backend` | identical to `Backend` (no start command, healthcheck `/api/get_version`); its `/etc/hosts` alias becomes `frontend_2` automatically from `SERVER_NUMBER` |
+| `Backend2` | this repo, root directory `/template/backend` | identical to `Backend` (no start command, no healthcheck); its `/etc/hosts` alias becomes `frontend_2` automatically from `SERVER_NUMBER` |
 | `Supervisor2` | same image | identical to `Supervisor`; **attach a fresh volume at `/scoreboard_db`** (volumes are not copied when duplicating) |
 | `Frontend2` | this repo, root directory `/template/frontend` | identical to `Frontend`; generate a Railway domain targeting port 80 (and optionally a second domain targeting port 81 for the public scoreboard) |
 
