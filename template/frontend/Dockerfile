@@ -15,13 +15,13 @@ ARG CRCON_VERSION=latest
 
 FROM cericmathey/hll_rcon_tool:${CRCON_VERSION} AS djangostatic
 
-# The maintenance flag makes settings.py skip DB access at import time, so
-# collectstatic can run without Postgres/Redis being reachable.
-ENV HLL_MAINTENANCE_CONTAINER=true \
-    LOGGING_PATH=/tmp/ \
-    LOGGING_FILENAME=collectstatic.log
-
-RUN mkdir -p /static && cd rconweb && python manage.py collectstatic --noinput
+# collectstatic cannot run at build time: CRCON's Django app opens a
+# database connection during startup and there is no Postgres in the build.
+# The only app with static files is django.contrib.admin, so copy its
+# assets straight from the installed package; the result is identical to
+# what collectstatic would produce (STATIC_URL=/djangostatic/ -> /admin/*).
+RUN mkdir -p /static \
+    && cp -r "$(python -c 'import django, pathlib; print(pathlib.Path(django.__file__).parent / "contrib" / "admin" / "static" / "admin")')" /static/admin
 
 FROM cericmathey/hll_rcon_tool_frontend:${CRCON_VERSION}
 
