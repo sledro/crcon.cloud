@@ -26,7 +26,7 @@ before editing variables, because they reference each other's domains.
 
 | New service | Source | Start command / settings |
 |---|---|---|
-| `Backend2` | same image as `Backend` (e.g. `cericmathey/hll_rcon_tool:v12.2.1`) | identical to `Backend` (start command, healthcheck `/api/get_version`) |
+| `Backend2` | this repo, root directory `/template/backend` | identical to `Backend` (no start command, healthcheck `/api/get_version`); its `/etc/hosts` alias becomes `frontend_2` automatically from `SERVER_NUMBER` |
 | `Supervisor2` | same image | identical to `Supervisor`; **attach a fresh volume at `/scoreboard_db`** (volumes are not copied when duplicating) |
 | `Frontend2` | this repo, root directory `/template/frontend` | identical to `Frontend`; generate a Railway domain targeting port 80 (and optionally a second domain targeting port 81 for the public scoreboard) |
 
@@ -51,8 +51,9 @@ each one must be edited).
 | `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/2` | note the `/2` |
 | `RCONWEB_API_SECRET` | `${{Backend.RCONWEB_API_SECRET}}` | all backends share ONE secret (they share one Django DB); a reference keeps them in lockstep |
 | `SUPERVISOR_RPC_URL` | `http://${{Supervisor2.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` | |
-| `DOMAINS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}},${{RAILWAY_PRIVATE_DOMAIN}}` | |
+| `DOMAINS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}},${{RAILWAY_PRIVATE_DOMAIN}},healthcheck.railway.app` | |
 | `RCONWEB_EXTERNAL_ADDRESS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}}` | |
+| `CRCON_FRONTEND_HOST` | `${{Frontend2.RAILWAY_PRIVATE_DOMAIN}}` | |
 
 Unchanged from `Backend`: all `HLL_DB_*` references, `HLL_REDIS_HOST`,
 `HLL_REDIS_PORT`, `LOGGING_*`, `CONFIG_DIR`, `NB_API_*`, `PORT`, the

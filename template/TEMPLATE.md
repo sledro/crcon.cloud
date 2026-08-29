@@ -19,7 +19,7 @@ Railway gets one service per container:
 | `Redis` | image `redis:alpine` | cache / queues |
 | `Maintenance` | image `cericmathey/hll_rcon_tool` | one-shot migrations, then sleeps |
 | `Webhooks` | image `cericmathey/hll_rcon_tool` | Discord webhook dispatcher |
-| `Backend` | image `cericmathey/hll_rcon_tool` | Django API (gunicorn :8000, daphne :8001) |
+| `Backend` | this repo, root dir `/template/backend` | Django API (gunicorn :8000, daphne :8001) |
 | `Supervisor` | this repo, root dir `/template/supervisor` | ~15 background workers under supervisord |
 | `Frontend` | this repo, root dir `/template/frontend` | nginx: admin UI (:80) + public stats (:81) |
 
@@ -154,14 +154,14 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh webhook_service"
 The Django API. This is where deployers enter their game server details;
 every other service references them from here, so they are typed once.
 
-- **Source**: Docker image `cericmathey/hll_rcon_tool:v12.2.1`
-- **Start command** (waits for Maintenance to finish migrating before
-  starting the web server):
-
-```
-sh -c "mkdir -p /logs /static /servicediscovery && until python /code/rconweb/manage.py migrate --check >/dev/null 2>&1; do echo Waiting for database migrations; sleep 5; done && exec /code/entrypoint.sh web"
-```
-
+- **Source**: this GitHub repo, **root directory** `/template/backend`
+  (wrapper image whose entrypoint waits for migrations, creates the
+  bind-mount directories, and keeps a `frontend_<SERVER_NUMBER>` alias
+  in /etc/hosts pointing at the Frontend service; CRCON's multi-server
+  registry calls that literal compose hostname to build the UI server
+  list)
+- **Start command**: none (the wrapper entrypoint defaults to `web`; a
+  custom start command would bypass it)
 - **Healthcheck path**: `/api/get_version` (unauthenticated, returns 200)
 - **Variables** (mark the first three as required user inputs with the
   given descriptions):
@@ -186,6 +186,7 @@ sh -c "mkdir -p /logs /static /servicediscovery && until python /code/rconweb/ma
 | `HLL_REDIS_DB` | `1` | |
 | `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/1` | |
 | `PORT` | `8000` | unused by CRCON; tells Railway which port to healthcheck |
+| `CRCON_FRONTEND_HOST` | `${{Frontend.RAILWAY_PRIVATE_DOMAIN}}` | target of the /etc/hosts `frontend_<N>` alias (see Source note) |
 | `RCONWEB_API_SECRET` | `${{secret(64)}}` | encrypts sessions/passwords; never change after first deploy |
 | `SUPERVISOR_RPC_URL` | `http://${{Supervisor.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` | lets the UI's Services page control workers |
 | `NB_API_WORKERS` | `1` | |
