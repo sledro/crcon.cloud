@@ -18,6 +18,15 @@
 
 limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
 
+# Re-resolve the backend's private domain per request instead of once at
+# startup: Railway services get a new private IP on every redeploy, and a
+# statically resolved upstream would silently black-hole after the backend
+# redeploys. ${CRCON_DNS} is the container's own resolver, read from
+# /etc/resolv.conf by entrypoint.sh. Deferred resolution (via the
+# variable-based proxy_pass below) also lets nginx start before the
+# backend exists.
+resolver ${CRCON_DNS} valid=10s;
+
 set_real_ip_from 0.0.0.0/0;
 set_real_ip_from ::/0;
 real_ip_header X-Forwarded-For;
@@ -47,6 +56,12 @@ map $http_forwarded $proxy_add_forwarded {
 server {
         listen 80 default_server;
         listen [::]:80 default_server;
+
+        # Variables force per-request resolution via the resolver above.
+        # proxy_pass uses these WITHOUT a URI suffix so the original
+        # request path is forwarded unchanged.
+        set $crcon_api http://${CRCON_API_HOST}:8000;
+        set $crcon_ws http://${CRCON_API_HOST}:8001;
 
         root /var/www;
 
@@ -83,7 +98,7 @@ server {
             add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0' always;
             proxy_set_header Forwarded $proxy_add_forwarded;
             proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
-            proxy_pass http://${CRCON_API_HOST}:8000/api;
+            proxy_pass $crcon_api;
         }
 
         location /accounts {
@@ -91,7 +106,7 @@ server {
             limit_req_status 429;
             proxy_set_header Forwarded $proxy_add_forwarded;
             proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
-            proxy_pass http://${CRCON_API_HOST}:8000/accounts;
+            proxy_pass $crcon_api;
         }
 
         location /djangostatic {
@@ -112,18 +127,18 @@ server {
             limit_req_status 429;
             proxy_set_header Forwarded $proxy_add_forwarded;
             proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
-            proxy_pass http://${CRCON_API_HOST}:8000/admin;
+            proxy_pass $crcon_api;
         }
 
         location /api/scoreboard {
             auth_basic "off";
             proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
             proxy_set_header Forwarded $proxy_add_forwarded;
-            proxy_pass http://${CRCON_API_HOST}:8000/api/scoreboard;
+            proxy_pass $crcon_api;
         }
 
         location /ws {
-            proxy_pass http://${CRCON_API_HOST}:8001;
+            proxy_pass $crcon_ws;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_redirect off;
@@ -140,6 +155,8 @@ server {
 server {
         listen 81;
         listen [::]:81;
+
+        set $crcon_api http://${CRCON_API_HOST}:8000;
 
         root /var/www_public;
 
@@ -186,6 +203,6 @@ server {
             add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
             proxy_set_header Forwarded $proxy_add_forwarded;
             proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
-            proxy_pass http://${CRCON_API_HOST}:8000/api;
+            proxy_pass $crcon_api;
         }
 }

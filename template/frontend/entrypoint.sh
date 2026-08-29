@@ -9,12 +9,20 @@ set -e
 # ${{Backend.RAILWAY_PRIVATE_DOMAIN}}.
 : "${CRCON_API_HOST:?CRCON_API_HOST must be set to the private domain of the backend service}"
 
-# Only substitute our own variable; the nginx config is full of $vars that
-# must survive untouched.
-envsubst '${CRCON_API_HOST}' \
+# The container's own DNS server, for nginx's `resolver` directive (nginx
+# does not read /etc/resolv.conf itself). Bracket IPv6 addresses.
+CRCON_DNS="$(awk '/^nameserver/ {print $2; exit}' /etc/resolv.conf)"
+case "$CRCON_DNS" in
+    *:*) CRCON_DNS="[$CRCON_DNS]" ;;
+esac
+export CRCON_DNS
+
+# Only substitute our own variables; the nginx config is full of $vars
+# that must survive untouched.
+envsubst '${CRCON_API_HOST} ${CRCON_DNS}' \
     < /railway/nginx.conf.template \
     > /config/nginx.conf
 
-echo "Rendered /config/nginx.conf with CRCON_API_HOST=${CRCON_API_HOST}"
+echo "Rendered /config/nginx.conf with CRCON_API_HOST=${CRCON_API_HOST} CRCON_DNS=${CRCON_DNS}"
 
 exec /code/entrypoint.sh "$@"
