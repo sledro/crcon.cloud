@@ -1,0 +1,191 @@
+# Railway-adapted nginx config for CRCON.
+#
+# Derived from upstream config/default-nginx.conf with these changes:
+#   - TLS listeners removed: Railway terminates TLS at its edge and forwards
+#     plain HTTP to the container, so ports 443/444 are not needed.
+#   - proxy_pass targets ${CRCON_API_HOST} (the backend service's Railway
+#     private domain) instead of the compose network alias "backend".
+#     ${CRCON_API_HOST} is substituted by entrypoint.sh at container start.
+#   - Real client IP is restored from X-Forwarded-For. On Railway the only
+#     way to reach this container's HTTP ports from the internet is through
+#     Railway's edge proxy, so trusting the connecting peer is safe here
+#     (unlike a directly-exposed host). real_ip_recursive stays off so the
+#     rightmost, Railway-appended address wins and clients cannot spoof
+#     their way past the login rate limit.
+#   - /djangostatic and /media are served from /static, which is baked into
+#     this image at build time (upstream shares a ./static bind mount
+#     between backend and frontend; Railway volumes can't be shared).
+
+limit_req_zone $binary_remote_addr zone=login:10m rate=1r/s;
+
+set_real_ip_from 0.0.0.0/0;
+set_real_ip_from ::/0;
+real_ip_header X-Forwarded-For;
+real_ip_recursive off;
+
+map $remote_addr $proxy_forwarded_elem {
+    # IPv4 addresses can be sent as-is
+    ~^[0-9.]+$          "for=$remote_addr";
+
+    # IPv6 addresses need to be bracketed and quoted
+    ~^[0-9A-Fa-f:.]+$   "for=\"[$remote_addr]\"";
+
+    # Unix domain socket names cannot be represented in RFC 7239 syntax
+    default             "for=unknown";
+}
+
+map $http_forwarded $proxy_add_forwarded {
+    # If the incoming Forwarded header is syntactically valid, append to it
+    "~^(,[ \\t]*)*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?)*([ \\t]*,([ \\t]*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?)*)?)*$" "$http_forwarded, $proxy_forwarded_elem";
+
+    # Otherwise, replace it
+    default "$proxy_forwarded_elem";
+}
+
+
+# Admin UI (Railway domain with target port 80)
+server {
+        listen 80 default_server;
+        listen [::]:80 default_server;
+
+        root /var/www;
+
+        index index.html index.htm index.nginx-debian.html;
+
+        server_name _;
+
+        gzip on;
+        gzip_buffers 16 8k;
+        gzip_comp_level 6;
+        gzip_proxied any;
+        gzip_vary on;
+        gzip_types text/plain text/css image/svg+xml application/xml application/json text/javascript application/javascript;
+
+        location = /runtime-config.js {
+            if_modified_since off;
+            expires off;
+            etag off;
+            add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0' always;
+        }
+
+        location / {
+            try_files $uri /index.html;
+            add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=6000';
+            if_modified_since off;
+            expires off;
+            etag off;
+        }
+
+        location /api {
+            if_modified_since off;
+            expires off;
+            etag off;
+            add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0' always;
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_pass http://${CRCON_API_HOST}:8000/api;
+        }
+
+        location /accounts {
+            limit_req zone=login burst=5;
+            limit_req_status 429;
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_pass http://${CRCON_API_HOST}:8000/accounts;
+        }
+
+        location /djangostatic {
+            alias /static;
+            autoindex off;
+        }
+
+        # Serve media files (user uploads)
+        location /media {
+            alias /static/media;
+            autoindex off;
+            expires 30d;
+            add_header Cache-Control "public";
+        }
+
+        location /admin {
+            limit_req zone=login burst=5;
+            limit_req_status 429;
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_pass http://${CRCON_API_HOST}:8000/admin;
+        }
+
+        location /api/scoreboard {
+            auth_basic "off";
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_pass http://${CRCON_API_HOST}:8000/api/scoreboard;
+        }
+
+        location /ws {
+            proxy_pass http://${CRCON_API_HOST}:8001;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_redirect off;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_set_header X-Forwarded-Host $server_name;
+        }
+}
+
+
+# Public scoreboard/stats site (optional second Railway domain, target port 81)
+server {
+        listen 81;
+        listen [::]:81;
+
+        root /var/www_public;
+
+        index index.html index.htm index.nginx-debian.html;
+
+        server_name _;
+
+        gzip on;
+        gzip_buffers 16 8k;
+        gzip_comp_level 6;
+        gzip_proxied any;
+        gzip_vary on;
+        gzip_types text/plain text/css image/svg+xml application/xml application/json text/javascript application/javascript;
+
+        location = /runtime-config.js {
+            if_modified_since off;
+            expires off;
+            etag off;
+            add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0' always;
+        }
+
+        # Serve media files (user uploads)
+        location /media {
+            alias /static/media;
+            autoindex off;
+            expires 30d;
+            add_header Cache-Control "public";
+        }
+
+        # Fallback to index.html for all other routes (SPA routing)
+        location / {
+            try_files $uri /index.html;
+
+            # Prevent caching
+            if_modified_since off;
+            expires off;
+            etag off;
+        }
+
+        location /api {
+            if_modified_since off;
+            expires off;
+            etag off;
+            add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
+            proxy_set_header Forwarded $proxy_add_forwarded;
+            proxy_set_header X-Forwarded-For "$http_x_forwarded_for, $realip_remote_addr";
+            proxy_pass http://${CRCON_API_HOST}:8000/api;
+        }
+}
