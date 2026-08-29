@@ -1,0 +1,72 @@
+---
+title: "Variables"
+description: "Every variable a deployer might touch, and what the rest are for"
+---
+
+The template configures roughly 40 variables across the seven services.
+Almost all of them are wired together with Railway references and never
+need touching. This page covers the ones you might actually change,
+then summarizes the wiring for the curious.
+
+## Variables you set at deploy time
+
+All three live on the **backend** service; the supervisor references
+them from there.
+
+| Variable | Meaning |
+|---|---|
+| `HLL_HOST` | Your game server's IP address, without a port |
+| `HLL_PORT` | The RCON port (not the game or query port) |
+| `HLL_PASSWORD` | The RCON password from your provider's panel |
+
+Changing them later: edit them on the backend, then redeploy the
+backend and supervisor.
+
+## Variables you might change later
+
+| Variable | Service | Meaning |
+|---|---|---|
+| `HLL_GAME` | backend | `hll` (default) or `hllv` for Hell Let Loose: Vietnam. Supervisor and frontend reference it |
+| `DONT_SEED_ADMIN_USER` | backend | Empty seeds the default `admin` / `admin` login on first boot. Set to any value to disable seeding |
+| `SENTRY_DSN` | backend | Optional Sentry error reporting |
+| `DOMAINS` | backend | Django's allowed hosts and CSRF origins. Add any custom domain you attach to the frontend, keeping the existing entries |
+| `RCONWEB_EXTERNAL_ADDRESS` | backend, supervisor | The public address CRCON advertises. Update if you switch the frontend to a custom domain |
+| `SESSION_COOKIE_DOMAIN`, `CSRF_COOKIE_DOMAIN` | backend | Only for multi-server single sign-on on custom subdomains; see the [multi-server guide](/guides/multi-server) |
+
+## Multi-server identity
+
+These two make each game server's data distinct. Rules and per-server
+values are covered in the [multi-server guide](/guides/multi-server).
+
+| Variable | Meaning |
+|---|---|
+| `SERVER_NUMBER` | Namespaces every database record for this game server. Never reuse across live services |
+| `HLL_REDIS_DB` | The Redis logical database for this game server. Never reuse; match `SERVER_NUMBER` |
+
+## The wiring (don't touch)
+
+Everything else exists to point services at each other and mirror
+upstream's compose file:
+
+- **Database**: `HLL_DB_*` on the backend and supervisor reference the
+  Postgres service's generated credentials (`POSTGRES_USER`,
+  `POSTGRES_PASSWORD`, `POSTGRES_DB`) and private domain.
+- **Redis**: `HLL_REDIS_HOST`, `HLL_REDIS_PORT`, and `HLL_REDIS_URL`
+  reference the Redis service's private domain.
+- **Secrets**: `RCONWEB_API_SECRET` is generated once at deploy and
+  encrypts sessions and stored passwords. **Never change it after
+  first deploy**; doing so invalidates stored credentials.
+- **Cross-service**: `CRCON_API_HOST` (frontend to backend),
+  `SUPERVISOR_RPC_URL` (backend to supervisor), and
+  `CRCON_FRONTEND_HOST` (backend's internal alias for the UI's
+  multi-server registry) are all private-network references.
+- **Ports**: `PORT` tells Railway which port to healthcheck where a
+  healthcheck exists; `RCONWEB_PORT`, `PUBLIC_STATS_PORT`, and
+  `PUBLIC_STATS_PORT_HTTPS` are display-only on Railway.
+- **Logging**: `LOGGING_LEVEL` (`INFO`), `LOGGING_PATH`, and
+  `CONFIG_DIR` mirror upstream defaults.
+
+For the full service-by-service recipe (the template maintainer's
+view), see
+[TEMPLATE.md](https://github.com/sledro/crcon.cloud/blob/main/template/TEMPLATE.md)
+in the repo.

@@ -1,0 +1,94 @@
+---
+title: "Troubleshooting"
+description: "First-boot behavior, log messages that look scary but aren't, and real problems"
+---
+
+## First boot: what's normal
+
+The seven services start in parallel and sort their ordering out at
+runtime, so the first few minutes look messier than they are.
+
+<AccordionGroup>
+  <Accordion title='Backend logs "Waiting for database migrations" over and over'>
+    Normal. The backend refuses to start Django until the maintenance
+    service has finished preparing the database, and polls every 5
+    seconds. On a busy Railway build queue the maintenance service can
+    sit in "Queued" for many minutes before it even starts, and the
+    backend patiently waits it out, then starts on its own. **No restart
+    is needed**; if you restart it, it just waits again from scratch.
+  </Accordion>
+  <Accordion title="A service sits in Queued or Building for a long time">
+    Railway builds have a shared queue. Fresh 7-service deploys
+    occasionally see one service (often maintenance) held back 5-30
+    minutes. Everything downstream waits and recovers on its own.
+  </Accordion>
+  <Accordion title="Frontend restarted once or twice right after deploy">
+    Normal. nginx exits until the backend's private DNS name resolves,
+    and Railway restarts it. It stabilizes as soon as the backend
+    exists.
+  </Accordion>
+  <Accordion title="Supervisor shows scoreboard as FATAL">
+    Normal until you configure the public scoreboard in the CRCON UI.
+    The `seed_vip`, `log_stream`, and `watch_killrate` workers likewise
+    exit when their features are unconfigured. This is upstream
+    behavior, not a deployment problem.
+  </Accordion>
+  <Accordion title='Logs show "No maps information available"'>
+    Normal for the first minute or two after the backend starts, while
+    the map cache warms up from the game server. If it persists beyond
+    that, check the RCON connection (below).
+  </Accordion>
+  <Accordion title="502 or error page in the browser during the first minutes">
+    The frontend serves 502 for API calls until the backend is up
+    (which itself waits for migrations). Give it a few minutes and
+    refresh.
+  </Accordion>
+</AccordionGroup>
+
+## Real problems
+
+<AccordionGroup>
+  <Accordion title="Dashboard loads but shows no server data">
+    CRCON can't reach your game server's RCON. Check `HLL_HOST`,
+    `HLL_PORT`, and `HLL_PASSWORD` on the **backend** service. The RCON
+    port is not the game or query port. After fixing, redeploy the
+    backend and supervisor (they read the values at startup).
+  </Accordion>
+  <Accordion title="Login page loads but signing in fails or loops">
+    If you changed the frontend's domain, make sure the backend's
+    `DOMAINS` variable includes the new domain, and
+    `RCONWEB_EXTERNAL_ADDRESS` matches it. Django rejects hosts it
+    doesn't know.
+  </Accordion>
+  <Accordion title="Site unreachable, Railway shows the frontend Online">
+    Check the domain's target port: the admin UI is on port **80**, the
+    public scoreboard on port **81**. A Railway domain generated before
+    the first deploy can default to 8080; edit the domain and set the
+    port explicitly.
+  </Accordion>
+  <Accordion title="Server list in the UI is empty or the server switcher is missing entries">
+    The backend keeps an internal alias so CRCON's multi-server registry
+    can call each frontend by its compose-style name. If you renamed
+    services, make sure each backend's `CRCON_FRONTEND_HOST` points at
+    its own frontend's private domain, and that `SERVER_NUMBER` values
+    are unique.
+  </Accordion>
+  <Accordion title="Everything was fine, then API calls started hanging after a backend redeploy">
+    This shouldn't happen (nginx re-resolves the backend per request,
+    specifically to survive redeploys), but if it does, restart the
+    frontend service and please open an issue on the repo.
+  </Accordion>
+</AccordionGroup>
+
+## Where to look
+
+- **Railway logs** per service are the primary tool: backend for API
+  errors, supervisor for worker crashes, maintenance for migration
+  output.
+- The **Services page** inside the CRCON UI shows supervisor worker
+  status and lets you restart individual workers.
+- Upstream's [wiki](https://github.com/MarechJ/hll_rcon_tool/wiki) and
+  Discord cover CRCON's own features and configuration.
+
+Still stuck? [Open an issue](https://github.com/sledro/crcon.cloud/issues)
+with the service logs and what you expected.

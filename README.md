@@ -9,7 +9,9 @@ This repo hosts:
   frontend image, the full template composer recipe
   ([TEMPLATE.md](template/TEMPLATE.md)), and the multi-server runbook
   ([EXPANDING.md](template/EXPANDING.md)).
-- The crcon.cloud website and docs (coming soon).
+- [`docs/`](docs/): the crcon.cloud website, a
+  [Mintlify](https://mintlify.com) documentation site for people
+  deploying and operating the template.
 
 ## Credits and license
 

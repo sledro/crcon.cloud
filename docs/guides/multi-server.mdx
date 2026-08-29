@@ -1,0 +1,127 @@
+---
+title: "Multiple game servers"
+description: "Manage 2-10 Hell Let Loose servers from one CRCON install"
+---
+
+One CRCON install manages up to 10 game servers. The shared core the
+template deploys (Postgres, Redis, maintenance, webhooks) serves all of
+them; every additional game server adds exactly **three services**: a
+backend, a supervisor, and a frontend. All servers share player
+profiles, blacklists, VIPs, and accounts because they share the
+database, and the server switcher in the UI discovers siblings through
+the shared Redis.
+
+<Warning>
+  Two hard rules, straight from upstream:
+
+  - **Never reuse a `SERVER_NUMBER`** across live services. It
+    namespaces every database record.
+  - **Never reuse an `HLL_REDIS_DB`**. Redis ships with 16 logical
+    databases, so numbers 1-10 are safe.
+
+  Use the same number N for both. Server 1 already uses `1`.
+</Warning>
+
+This guide adds game server **2**. For servers 3, 4, 5 and up, repeat
+with the next number.
+
+## Step 1: create the three services
+
+In the deployed project, duplicate the existing services (right-click,
+**Duplicate**) or create them fresh from the sources below. Create all
+three before editing variables, because they reference each other's
+domains.
+
+| New service | Source | Settings |
+|---|---|---|
+| `Backend2` | this repo, root directory `/template/backend` | identical to `backend` (no start command, no healthcheck) |
+| `Supervisor2` | this repo, root directory `/template/supervisor` | identical to `supervisor`; **attach a fresh volume at `/scoreboard_db`** (volumes are not copied when duplicating) |
+| `Frontend2` | this repo, root directory `/template/frontend` | identical to `frontend`; generate a domain targeting port 80 (and optionally a second domain on port 81 for the public scoreboard) |
+
+## Step 2: set the variables
+
+Duplicated services inherit server 1's variables. Everything stays the
+same **except** the rows below.
+
+### Backend2
+
+| Name | Value |
+|---|---|
+| `HLL_HOST` | game server 2's IP |
+| `HLL_PORT` | game server 2's RCON port |
+| `HLL_PASSWORD` | game server 2's RCON password |
+| `HLL_GAME` | `hll` or `hllv`, per server; a mixed fleet is fine |
+| `SERVER_NUMBER` | `2` |
+| `HLL_REDIS_DB` | `2` |
+| `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/2` (note the `/2`) |
+| `RCONWEB_API_SECRET` | `${{Backend.RCONWEB_API_SECRET}}`: all backends share one secret |
+| `SUPERVISOR_RPC_URL` | `http://${{Supervisor2.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` |
+| `DOMAINS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}},${{RAILWAY_PRIVATE_DOMAIN}},healthcheck.railway.app` |
+| `RCONWEB_EXTERNAL_ADDRESS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}}` |
+| `CRCON_FRONTEND_HOST` | `${{Frontend2.RAILWAY_PRIVATE_DOMAIN}}` |
+
+All the `HLL_DB_*` references, Redis host and port, logging variables,
+and `PORT` stay unchanged.
+
+### Supervisor2
+
+| Name | Value |
+|---|---|
+| `HLL_HOST` | `${{Backend2.HLL_HOST}}` |
+| `HLL_PORT` | `${{Backend2.HLL_PORT}}` |
+| `HLL_PASSWORD` | `${{Backend2.HLL_PASSWORD}}` |
+| `HLL_GAME` | `${{Backend2.HLL_GAME}}` |
+| `SERVER_NUMBER` | `2` |
+| `HLL_REDIS_DB` | `2` |
+| `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/2` |
+| `RCONWEB_EXTERNAL_ADDRESS` | `${{Frontend2.RAILWAY_PUBLIC_DOMAIN}}` |
+
+`RCONWEB_API_SECRET` stays referenced to server 1's backend (the shared
+secret). Database and Redis host references are unchanged.
+
+### Frontend2
+
+| Name | Value |
+|---|---|
+| `CRCON_API_HOST` | `${{Backend2.RAILWAY_PRIVATE_DOMAIN}}` |
+| `HLL_GAME` | `${{Backend2.HLL_GAME}}` |
+
+`RCONWEB_EXTERNAL_ADDRESS` stays `${{RAILWAY_PUBLIC_DOMAIN}}` (a
+self-reference, so it resolves to Frontend2's own domain).
+
+## Step 3: deploy and verify
+
+Deploy the three services. No migration step is needed; the shared
+database is already prepared, and Backend2 waits for readiness on first
+boot just like server 1 did. Then check:
+
+1. Log in at Frontend2's domain (accounts are shared with server 1, but
+   sessions are per-domain; see the note below).
+2. The live game view populates from game server 2.
+3. The server-switcher dropdown in each UI lists the other server.
+4. The Services page on server 2 responds.
+
+## Notes
+
+<AccordionGroup>
+  <Accordion title="Logins are per-domain on Railway-provided domains">
+    Accounts are shared, sessions are not. If you attach custom
+    subdomains of one apex you control (like `rcon1.example.com` and
+    `rcon2.example.com`), set `SESSION_COOKIE_DOMAIN=.example.com` and
+    `CSRF_COOKIE_DOMAIN=.example.com` on every backend, and add each
+    custom domain to that backend's `DOMAINS` list, to get single
+    sign-on across servers. This cannot work on `*.up.railway.app`
+    domains. The [custom domain guide](/guides/custom-domain) has the
+    full setup.
+  </Accordion>
+  <Accordion title="Cost scales roughly linearly">
+    Each game server adds a supervisor (the heaviest service, around 15
+    worker processes), a backend, and a frontend. The shared Postgres is
+    already sized for 10 servers.
+  </Accordion>
+  <Accordion title="Removing a server">
+    Delete its three services (and the supervisor's volume). Historical
+    data stays in Postgres under that server number; don't reuse the
+    number afterwards unless you know the history is irrelevant.
+  </Accordion>
+</AccordionGroup>

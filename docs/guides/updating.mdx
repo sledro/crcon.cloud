@@ -1,0 +1,54 @@
+---
+title: "Updating"
+description: "How CRCON versions and template updates roll out to your deployment"
+---
+
+## How versions work
+
+Everything in the stack runs the **same pinned CRCON release**, so the
+seven services can never drift apart:
+
+- `maintenance` and `webhooks` run the upstream image, pinned by tag.
+- `backend`, `supervisor`, and `frontend` build from this repo, which
+  pins the same tag inside its Dockerfiles.
+
+The template deliberately does **not** track upstream's `latest` tag. A
+new CRCON release lands here after it has been tested against the
+Railway setup.
+
+## Updating your deployment
+
+<Steps>
+  <Step title="Repo-built services notify you">
+    The backend, supervisor, and frontend deploy from this GitHub repo.
+    When the repo updates, Railway shows an update notification on those
+    services; accepting it rebuilds them from the new commit.
+  </Step>
+  <Step title="Bump the image services to match">
+    When an update changes the pinned CRCON version, also update the
+    image tag on `maintenance` and `webhooks` (service Settings, Source)
+    to the same version. The update notes will say when this is needed.
+  </Step>
+  <Step title="Redeploy order">
+    Redeploy `maintenance` first (it runs the new migrations), then the
+    rest. The backend blocks until the migrations are done, so getting
+    the order wrong delays things rather than breaking them.
+  </Step>
+</Steps>
+
+<Note>
+  Database migrations run automatically on every maintenance deploy.
+  There is never a manual migration step.
+</Note>
+
+## Version drift warning
+
+If you manually change the image tag on one service, keep all of them
+in lockstep. Upstream does not support mixed-version stacks, and the
+database schema is tied to the release the maintenance service runs.
+
+## Backups
+
+All persistent state lives in the Postgres service's volume (plus the
+supervisor's small scoreboard cache). Railway supports volume backups
+from the service's settings; do that before major version jumps.
