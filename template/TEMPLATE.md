@@ -111,6 +111,13 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh maintenance"
 | `HLL_REDIS_HOST_PORT` | `6379` |
 | `HLL_REDIS_DB` | `1` |
 | `HLL_REDIS_URL` | `redis://${{Redis.RAILWAY_PRIVATE_DOMAIN}}:6379/1` |
+| `SERVER_NUMBER` | `1` |
+| `HLL_GAME` | `${{Backend.HLL_GAME}}` |
+
+`SERVER_NUMBER` and `HLL_GAME` are required: the `split_user_config_key`
+alembic migration reads them to map servers to games and aborts with "No
+server/game configuration was provided" without them. Multi-server
+installs must mirror every `SERVER_NUMBER_N`/`HLL_GAME_N` pair here.
 
 ## Service 4: Webhooks
 
@@ -183,7 +190,7 @@ sh -c "mkdir -p /logs /static /servicediscovery && until python /code/rconweb/ma
 | `SUPERVISOR_RPC_URL` | `http://${{Supervisor.RAILWAY_PRIVATE_DOMAIN}}:9001/RPC2` | lets the UI's Services page control workers |
 | `NB_API_WORKERS` | `1` | |
 | `NB_API_THREADS` | `8` | |
-| `DOMAINS` | `${{Frontend.RAILWAY_PUBLIC_DOMAIN}},${{RAILWAY_PRIVATE_DOMAIN}}` | extends Django ALLOWED_HOSTS + CSRF trusted origins; the private entry covers nginx's proxied Host header |
+| `DOMAINS` | `${{Frontend.RAILWAY_PUBLIC_DOMAIN}},${{RAILWAY_PRIVATE_DOMAIN}},healthcheck.railway.app` | extends Django ALLOWED_HOSTS + CSRF trusted origins; the private entry covers nginx's proxied Host header, and `healthcheck.railway.app` is the Host header Railway's healthcheck probe sends (without it Django 400s the probe and the deploy times out) |
 | `RCONWEB_EXTERNAL_ADDRESS` | `${{Frontend.RAILWAY_PUBLIC_DOMAIN}}` | |
 | `RCONWEB_PORT` | `443` | display-only on Railway |
 | `PUBLIC_STATS_PORT` | `80` | display-only on Railway |
@@ -237,9 +244,12 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
 - **Source**: this GitHub repo, **root directory** `/template/frontend`
   (builds `frontend/Dockerfile` from this directory)
 - **Public networking**: HTTP, target port **80** (generate a Railway
-  domain). The public scoreboard site listens on port 81; deployers who
-  want it add a second domain to this service targeting port 81 after
-  deploy (Settings → Networking → add domain, pick port 81).
+  domain). If the domain is generated before the first successful deploy,
+  Railway defaults its target port to 8080 and the site 502s; edit the
+  domain and set port 80 explicitly. The public scoreboard site listens
+  on port 81; deployers who want it add a second domain to this service
+  targeting port 81 after deploy (Settings → Networking → add domain,
+  pick port 81).
 - **Healthcheck path**: `/`
 - **Variables**:
 
