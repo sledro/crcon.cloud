@@ -20,17 +20,21 @@ Railway gets one service per container:
 | `Maintenance` | image `cericmathey/hll_rcon_tool` | one-shot migrations, then sleeps |
 | `Webhooks` | image `cericmathey/hll_rcon_tool` | Discord webhook dispatcher |
 | `Backend` | image `cericmathey/hll_rcon_tool` | Django API (gunicorn :8000, daphne :8001) |
-| `Supervisor` | image `cericmathey/hll_rcon_tool` | ~15 background workers under supervisord |
+| `Supervisor` | this repo, root dir `/template/supervisor` | ~15 background workers under supervisord |
 | `Frontend` | this repo, root dir `/template/frontend` | nginx: admin UI (:80) + public stats (:81) |
 
 Design decisions that differ from upstream compose, and why:
 
 - **No shared bind mounts.** Railway volumes cannot be shared between
-  services. The `./config` directory ships inside the backend image at
-  `/code/config`, so each backend-family service copies it to `/config` in
-  its start command. Django's static files are baked into the Frontend
-  image at build time (see `frontend/Dockerfile`) instead of using the
-  shared `./static` mount.
+  services, and upstream's published images do NOT contain the `./config`
+  directory (it is in their `.dockerignore`; upstream bind-mounts it from
+  the git checkout). Only the Supervisor actually needs those files (its
+  entrypoint hardcodes `/config/supervisord.conf` and the cron/logrotate
+  paths), so this repo vendors them into a wrapper image
+  (`supervisor/Dockerfile`). Django's static files are baked into the
+  Frontend image at build time (see `frontend/Dockerfile`) instead of
+  using the shared `./static` mount. The `CONFIG_DIR` variable is unused
+  by current CRCON code.
 - **No `depends_on` ordering.** The Backend start command waits until the
   Maintenance service has finished database migrations (polls
   `manage.py migrate --check`) before starting the web server.
@@ -45,9 +49,10 @@ Design decisions that differ from upstream compose, and why:
   the API container's own logs.
 
 Pin one CRCON version everywhere. Use the same tag (e.g. `v12.2.1`) for
-the four `cericmathey/hll_rcon_tool` services and for `CRCON_VERSION` in
-`frontend/Dockerfile`, and bump them together. `latest` works but risks
-version skew between deploy times.
+the three `cericmathey/hll_rcon_tool` image services and for
+`CRCON_VERSION` in `frontend/Dockerfile` and `supervisor/Dockerfile`, and
+bump them together (re-sync `supervisor/config/` from upstream at the
+same time). `latest` works but risks version skew between deploy times.
 
 ---
 
@@ -71,8 +76,10 @@ version skew between deploy times.
 ## Service 2: Redis
 
 - **Source**: Docker image `redis:alpine`
-- **Start command**: `docker-entrypoint.sh redis-server --save 60 1 --maxclients 100000`
-  (mirrors upstream `config/redis.conf`)
+- **Start command**: `redis-server --save 60 1 --maxclients 100000`
+  (mirrors upstream `config/redis.conf`; deliberately does NOT go through
+  `docker-entrypoint.sh`, whose drop to the `redis` user cannot write RDB
+  snapshots to the root-owned Railway volume mount)
 - **Volume**: mount at `/data`
 - **Variables**: none
 
@@ -86,7 +93,7 @@ every version upgrade.
 - **Start command**:
 
 ```
-sh -c "mkdir -p /logs /config && cp -r /code/config/. /config/ && exec /code/entrypoint.sh maintenance"
+sh -c "mkdir -p /logs && exec /code/entrypoint.sh maintenance"
 ```
 
 - **Variables**:
@@ -111,7 +118,7 @@ sh -c "mkdir -p /logs /config && cp -r /code/config/. /config/ && exec /code/ent
 - **Start command**:
 
 ```
-sh -c "mkdir -p /logs /config && cp -r /code/config/. /config/ && exec /code/entrypoint.sh webhook_service"
+sh -c "mkdir -p /logs && exec /code/entrypoint.sh webhook_service"
 ```
 
 - **Variables**:
@@ -121,7 +128,6 @@ sh -c "mkdir -p /logs /config && cp -r /code/config/. /config/ && exec /code/ent
 | `HLL_WH_SERVICE_CONTAINER` | `true` |
 | `LOGGING_LEVEL` | `INFO` |
 | `LOGGING_PATH` | `/logs/` |
-| `CONFIG_DIR` | `/config/` |
 | `HLL_DB_USER` | `${{Postgres.POSTGRES_USER}}` |
 | `HLL_DB_PASSWORD` | `${{Postgres.POSTGRES_PASSWORD}}` |
 | `HLL_DB_NAME` | `${{Postgres.POSTGRES_DB}}` |
@@ -146,7 +152,7 @@ every other service references them from here, so they are typed once.
   starting the web server):
 
 ```
-sh -c "mkdir -p /logs /config /static /servicediscovery && cp -r /code/config/. /config/ && until python /code/rconweb/manage.py migrate --check >/dev/null 2>&1; do echo Waiting for database migrations; sleep 5; done; exec /code/entrypoint.sh web"
+sh -c "mkdir -p /logs /static /servicediscovery && until python /code/rconweb/manage.py migrate --check >/dev/null 2>&1; do echo Waiting for database migrations; sleep 5; done && exec /code/entrypoint.sh web"
 ```
 
 - **Healthcheck path**: `/api/get_version` (unauthenticated, returns 200)
@@ -162,7 +168,6 @@ sh -c "mkdir -p /logs /config /static /servicediscovery && cp -r /code/config/. 
 | `SERVER_NUMBER` | `1` | |
 | `LOGGING_LEVEL` | `INFO` | |
 | `LOGGING_PATH` | `/logs/` | |
-| `CONFIG_DIR` | `/config/` | |
 | `HLL_DB_USER` | `${{Postgres.POSTGRES_USER}}` | |
 | `HLL_DB_PASSWORD` | `${{Postgres.POSTGRES_PASSWORD}}` | |
 | `HLL_DB_NAME` | `${{Postgres.POSTGRES_DB}}` | |
@@ -192,11 +197,13 @@ Runs supervisord with all background workers (log loop, stats, automod,
 scoreboard, rq workers, cron, ...). This is the heaviest service in the
 stack (~15 Python processes).
 
-- **Source**: Docker image `cericmathey/hll_rcon_tool:v12.2.1`
+- **Source**: this GitHub repo, **root directory** `/template/supervisor`
+  (wrapper image that bakes in the supervisord/cron/logrotate configs
+  upstream expects at `/config`)
 - **Start command**:
 
 ```
-sh -c "mkdir -p /logs /config /scoreboard_db && cp -r /code/config/. /config/ && exec /code/entrypoint.sh supervisor"
+sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
 ```
 
 - **Volume**: mount at `/scoreboard_db` (SQLite cache used by the
@@ -212,7 +219,6 @@ sh -c "mkdir -p /logs /config /scoreboard_db && cp -r /code/config/. /config/ &&
 | `SERVER_NUMBER` | `1` |
 | `LOGGING_LEVEL` | `INFO` |
 | `LOGGING_PATH` | `/logs/` |
-| `CONFIG_DIR` | `/config/` |
 | `HLL_DB_USER` | `${{Postgres.POSTGRES_USER}}` |
 | `HLL_DB_PASSWORD` | `${{Postgres.POSTGRES_PASSWORD}}` |
 | `HLL_DB_NAME` | `${{Postgres.POSTGRES_DB}}` |

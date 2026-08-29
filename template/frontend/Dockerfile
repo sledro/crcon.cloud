@@ -10,8 +10,8 @@
 #      network alias.
 #
 # Pin CRCON_VERSION to the same tag used for the backend services in the
-# Railway template (e.g. v12.2.1) so the static files match the API version.
-ARG CRCON_VERSION=latest
+# Railway template so the static files match the API version.
+ARG CRCON_VERSION=v12.2.1
 
 FROM cericmathey/hll_rcon_tool:${CRCON_VERSION} AS djangostatic
 
