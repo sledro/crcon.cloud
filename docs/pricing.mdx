@@ -1,0 +1,49 @@
+---
+title: "Pricing"
+description: "What running CRCON on Railway actually costs"
+---
+
+The template itself is **free**. There is no charge from HLL CRCON
+Cloud, ever. You only pay [Railway](https://railway.com/pricing) for
+the computing power your install uses, the same way you'd pay for a
+VPS, just without managing one.
+
+## What to expect
+
+Two things make up your Railway bill:
+
+1. **The Hobby plan: \$5/month.**
+   This is Railway's base subscription,
+   and it includes your first \$5 of usage each month.
+2. **Usage beyond that.** A real single-server CRCON install uses
+   about **\$0.30-0.60 per day**, so expect a total Railway bill of
+   roughly **\$10-15 per month**. Most of that is the memory used by
+   the stats and automod workers running around the clock.
+
+<Frame caption="Real usage from a live install: about half a dollar after a day and a half of running">
+  <img
+    src="/images/railway-usage.png"
+    alt="Railway usage page showing current usage of $0.43, mostly memory"
+  />
+</Frame>
+
+<Note>
+  Railway's free trial gives a one-time \$5 credit, which this stack uses up in
+  a few days. That's plenty to try it out, but you'll need the Hobby plan to
+  keep it running.
+</Note>
+
+## Keeping an eye on it
+
+- **See your spending any time**: open your project in Railway, go to
+  **Settings, Usage**. That's the screen pictured above.
+- **Set a hard limit**: in your Railway account's workspace settings
+  you can set a monthly usage limit and email alerts, so a bill can
+  never surprise you.
+
+## Running more game servers
+
+Each [additional game server](/guides/multi-server) adds three more
+services to the same project, so the cost grows with your fleet. Rule
+of thumb: each extra server costs a bit less than the first one, since
+the database and other shared parts are already paid for.
