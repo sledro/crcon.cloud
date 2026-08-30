@@ -251,13 +251,15 @@ sh -c "mkdir -p /logs && exec /code/entrypoint.sh supervisor"
 
 - **Source**: this GitHub repo, **root directory** `/template/frontend`
   (builds `frontend/Dockerfile` from this directory)
-- **Public networking**: HTTP, target port **80** (generate a Railway
-  domain). If the domain is generated before the first successful deploy,
-  Railway defaults its target port to 8080 and the site 502s; edit the
-  domain and set port 80 explicitly. The public scoreboard site listens
-  on port 81; deployers who want it add a second domain to this service
-  targeting port 81 after deploy (Settings → Networking → add domain,
-  pick port 81).
+- **Public networking**: two HTTP proxies, port **80** (admin UI) and
+  port **81** (public scoreboard), in that order. Deploys generate one
+  domain per proxy automatically. Order matters:
+  `RAILWAY_PUBLIC_DOMAIN` (referenced by the backend's `DOMAINS` and
+  `RCONWEB_EXTERNAL_ADDRESS`) resolves to the FIRST proxy's domain, so
+  port 80 must stay first or logins break. Verified on a fresh deploy
+  2026-08-30. If a domain is ever added manually before the first
+  successful deploy, Railway defaults its target port to 8080; edit the
+  domain and set the port explicitly.
 - **Healthcheck path**: `/`
 - **Variables**:
 
