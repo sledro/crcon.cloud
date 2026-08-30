@@ -3,6 +3,8 @@
 One-click cloud hosting for [CRCON](https://github.com/MarechJ/hll_rcon_tool),
 the community RCON tool for Hell Let Loose.
 
+Visit: https://crcon.cloud to deploy.
+
 This repo hosts:
 
 - [`template/`](template/): the Railway deployment template. The custom
