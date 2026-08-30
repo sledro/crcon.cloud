@@ -1,54 +1,63 @@
 ---
 title: "Updating"
-description: "How CRCON versions and template updates roll out to your deployment"
+description: "Keep your install up to date with one click per service"
 ---
 
-## How versions work
+Your install runs a pinned, tested version of CRCON; it never changes
+underneath you. When we ship an update (a new CRCON release, or an
+improvement to the template) every service updates through Railway's
+built-in update flow. Nothing to type, no versions to look up.
 
-Everything in the stack runs the **same pinned CRCON release**, so the
-seven services can never drift apart:
-
-- `maintenance` and `webhooks` run the upstream image, pinned by tag.
-- `backend`, `supervisor`, and `frontend` build from this repo, which
-  pins the same tag inside its Dockerfiles.
-
-The template deliberately does **not** track upstream's `latest` tag. A
-new CRCON release lands here after it has been tested against the
-Railway setup.
-
-## Updating your deployment
+## How to update
 
 <Steps>
-  <Step title="Repo-built services notify you">
-    The backend, supervisor, and frontend deploy from this GitHub repo.
-    When the repo updates, Railway shows an update notification on those
-    services; accepting it rebuilds them from the new commit.
+  <Step title="Check for updates">
+    Open a CRCON service (start with **maintenance**), go to
+    **Settings**, and under **Source** click **Check for updates**. If
+    there's a new version, Railway offers to update the service; accept
+    it.
+
+    <Frame caption="Every CRCON service has this under Settings, Source">
+      <img src="/images/railway-check-updates.png" alt="Railway's Upstream Repo section with the Check for updates button" />
+    </Frame>
+
   </Step>
-  <Step title="Bump the image services to match">
-    When an update changes the pinned CRCON version, also update the
-    image tag on `maintenance` and `webhooks` (service Settings, Source)
-    to the same version. The update notes will say when this is needed.
+  <Step title="Repeat for the other four">
+    Do the same for **backend**, **supervisor**, **frontend**, and
+    **webhooks**. Starting with maintenance matters only a little: it
+    runs the database upgrades, and the others wait for it anyway, so a
+    different order just takes longer, it never breaks anything.
   </Step>
-  <Step title="Redeploy order">
-    Redeploy `maintenance` first (it runs the new migrations), then the
-    rest. The backend blocks until the migrations are done, so getting
-    the order wrong delays things rather than breaking them.
+  <Step title="Done when everything shows Online">
+    Database upgrades run automatically during the update; there is
+    never a manual migration step. Log in as usual once the services
+    are green.
   </Step>
 </Steps>
 
-<Note>
-  Database migrations run automatically on every maintenance deploy.
-  There is never a manual migration step.
-</Note>
+## Good to know
 
-## Version drift warning
-
-If you manually change the image tag on one service, keep all of them
-in lockstep. Upstream does not support mixed-version stacks, and the
-database schema is tied to the release the maintenance service runs.
-
-## Backups
-
-All persistent state lives in the Postgres service's volume (plus the
-supervisor's small scoreboard cache). Railway supports volume backups
-from the service's settings; do that before major version jumps.
+<AccordionGroup>
+  <Accordion title="postgres and redis don't need updating">
+    They're standard databases pinned to versions CRCON is tested
+    against. Leave them alone.
+  </Accordion>
+  <Accordion title='Sometimes "an update" changes nothing visible'>
+    The same repository also holds this documentation site, so Railway
+    occasionally offers an update that only contains docs changes.
+    Accepting it is harmless; it rebuilds the service identically.
+  </Accordion>
+  <Accordion title="Back up before big version jumps">
+    All your data lives in the postgres service's volume. Railway can
+    back up a volume from the service's settings; do that before a
+    major CRCON version jump, just in case.
+  </Accordion>
+  <Accordion title="Deployed before September 2026?">
+    Older deployments pull the CRCON image directly on the maintenance
+    and webhooks services, so those two won't show the update button.
+    To update them, open each one's **Settings, Source** and change the
+    image tag (for example `cericmathey/hll_rcon_tool:v12.2.1`) to the
+    same version the other services run. Or redeploy fresh from the
+    template and this page applies as written.
+  </Accordion>
+</AccordionGroup>

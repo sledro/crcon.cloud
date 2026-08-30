@@ -17,8 +17,8 @@ Railway gets one service per container:
 |---|---|---|
 | `Postgres` | image `postgres:12-alpine` | database |
 | `Redis` | image `redis:alpine` | cache / queues |
-| `Maintenance` | image `cericmathey/hll_rcon_tool` | one-shot migrations, then sleeps |
-| `Webhooks` | image `cericmathey/hll_rcon_tool` | Discord webhook dispatcher |
+| `Maintenance` | this repo, root dir `/template/upstream` | one-shot migrations, then sleeps |
+| `Webhooks` | this repo, root dir `/template/upstream` | Discord webhook dispatcher |
 | `Backend` | this repo, root dir `/template/backend` | Django API (gunicorn :8000, daphne :8001) |
 | `Supervisor` | this repo, root dir `/template/supervisor` | ~15 background workers under supervisord |
 | `Frontend` | this repo, root dir `/template/frontend` | nginx: admin UI (:80) + public stats (:81) |
@@ -48,11 +48,12 @@ Design decisions that differ from upstream compose, and why:
   shared mount. Use Railway's log viewer; the in-app log browser only sees
   the API container's own logs.
 
-Pin one CRCON version everywhere. Use the same tag (e.g. `v12.2.1`) for
-the three `cericmathey/hll_rcon_tool` image services and for
-`CRCON_VERSION` in `frontend/Dockerfile` and `supervisor/Dockerfile`, and
-bump them together (re-sync `supervisor/config/` from upstream at the
-same time). `latest` works but risks version skew between deploy times.
+Pin one CRCON version everywhere. The pinned tag (e.g. `v12.2.1`) lives
+in this repo's Dockerfiles (`backend/`, `frontend/`, `supervisor/`,
+`upstream/`); bump them together in one commit (re-sync
+`supervisor/config/` from upstream at the same time). Every service then
+updates through Railway's one-click "update available" flow. `latest`
+would risk version skew between deploy times.
 
 ---
 
@@ -89,7 +90,10 @@ Runs alembic + Django migrations and one-time data fixups, then sleeps
 forever. Keep it deployed; upstream uses it as the migration runner on
 every version upgrade.
 
-- **Source**: Docker image `cericmathey/hll_rcon_tool:v12.2.1`
+- **Source**: this GitHub repo, **root directory** `/template/upstream`
+  (a Dockerfile that is nothing but the pinned upstream image; built
+  from the repo so version bumps reach deployers via Railway's
+  one-click update flow instead of a manual image-tag edit)
 - **Start command**:
 
 ```
@@ -121,7 +125,8 @@ installs must mirror every `SERVER_NUMBER_N`/`HLL_GAME_N` pair here.
 
 ## Service 4: Webhooks
 
-- **Source**: Docker image `cericmathey/hll_rcon_tool:v12.2.1`
+- **Source**: this GitHub repo, **root directory** `/template/upstream`
+  (same rationale as Maintenance)
 - **Start command**:
 
 ```
