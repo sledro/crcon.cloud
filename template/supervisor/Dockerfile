@@ -10,7 +10,7 @@
 #
 # Keep CRCON_VERSION in lockstep with the image tags used by the other
 # backend-family services in the Railway template.
-ARG CRCON_VERSION=v12.2.0
+ARG CRCON_VERSION=v12.2.1
 
 FROM cericmathey/hll_rcon_tool:${CRCON_VERSION}
 

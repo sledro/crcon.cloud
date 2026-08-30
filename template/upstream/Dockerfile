@@ -4,5 +4,5 @@
 # every service in a deployment updates through Railway's one-click
 # "update available" flow. No entrypoint or start-command changes; each
 # service's start command picks its role.
-ARG CRCON_VERSION=v12.2.0
+ARG CRCON_VERSION=v12.2.1
 FROM cericmathey/hll_rcon_tool:${CRCON_VERSION}

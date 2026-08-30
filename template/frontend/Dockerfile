@@ -11,7 +11,7 @@
 #
 # Pin CRCON_VERSION to the same tag used for the backend services in the
 # Railway template so the static files match the API version.
-ARG CRCON_VERSION=v12.2.0
+ARG CRCON_VERSION=v12.2.1
 
 FROM cericmathey/hll_rcon_tool:${CRCON_VERSION} AS djangostatic
 
