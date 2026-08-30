@@ -1,27 +1,33 @@
 ---
-title: "Deploy CRCON"
+title: "Deploy CRCON Cloud"
 sidebarTitle: "Deploy"
 description: "Run CRCON, the Hell Let Loose admin tool, in the cloud in 60 seconds"
 ---
 
 [CRCON](https://github.com/MarechJ/hll_rcon_tool) gives your Hell Let
 Loose server a full web admin UI: live game view, player management,
-bans, VIPs, automod, Discord webhooks, and a public scoreboard. This
-template runs it on [Railway](https://railway.com): no VPS, no Docker,
+bans, VIPs, automod, Discord webhooks, and a public scoreboard.
+
+This template runs it on [Railway](https://railway.com): no VPS, no Docker,
 no config files.
 
-All you need is your game server's **IP**, **RCON port**, and **RCON
-password** from your game server provider's control panel.
+All you need is your game server's
+
+- **IP address**
+- **RCON port**
+- **RCON password**
+
+Simply click the "Deploy on Railway" button below, and follow the steps.
 
 [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template/hll-crcon-cloud)
 
-## Three steps
+## Four steps
 
 <Steps>
-  <Step title="Fill in the three variables and hit Deploy">
-    The button above opens Railway. Only the **backend** service needs
-    input: your game server's IP, RCON port, and RCON password. Then
-    click **Deploy**.
+  <Step title="Fill in the three values and hit Deploy">
+    The button above opens Railway. Only the **backend** service asks
+    for anything: your game server's IP, RCON port, and RCON password.
+    Then click **Deploy**.
 
     <Frame caption="The only three values the template asks for">
       <img src="/images/railway-config.png" alt="Railway deploy screen asking for HLL_HOST, HLL_PORT and HLL_PASSWORD" />
@@ -35,9 +41,9 @@ password** from your game server provider's control panel.
   </Step>
   <Step title="Wait for the services to come online">
     Railway builds and starts all seven services. This normally takes
-    around five minutes; if one service sits in "Queued" for a while,
-    that's Railway's build queue and it resolves on its own. The backend
-    logging `Waiting for database migrations` is normal; it starts by
+    around 30 seconds; if one sits in "Queued" for a while, that's
+    Railway's build queue and it sorts itself out. The backend logging
+    `Waiting for database migrations` is normal too; it starts by
     itself once the database is ready.
 
     <Frame caption="First boot complete: everything Online">
@@ -45,10 +51,24 @@ password** from your game server provider's control panel.
     </Frame>
 
   </Step>
+  <Step title="Find your two web addresses">
+    Click the **frontend** service, open **Settings**, and scroll to
+    **Networking**. Your deployment has two addresses, made for you
+    automatically:
+
+    - The **Port 80** address is your **admin UI**: this is where you
+      log in and manage your server.
+    - The **Port 81** address is your **public scoreboard**: share this
+      one with your community.
+
+    <Frame caption="Your two addresses, under the frontend service's Settings">
+      <img src="/images/railway-two-domains.png" alt="Railway networking settings showing two domains, one on port 80 and one on port 81" />
+    </Frame>
+
+  </Step>
   <Step title="Log in and change the password">
-    Open the **frontend** service's domain (shown on its card) and sign
-    in with `admin` / `admin`. Then **change that password immediately**
-    in the admin UI.
+    Open the **Port 80** address and sign in with `admin` / `admin`.
+    Then **change that password immediately** in the admin UI.
 
     <Frame caption="Your CRCON login page">
       <img src="/images/crcon-login.jpg" alt="CRCON sign-in page" />
@@ -60,24 +80,22 @@ password** from your game server provider's control panel.
 That's it. Your server name, live map, and player list appear on the
 dashboard within a minute.
 
-<Accordion title="Optional: enable the public scoreboard">
-  The frontend also serves a public stats site for your community. It already
-  has its own URL: the frontend service's **second** domain, the one targeting
-  port **81** (Settings, Networking). It shows data once you configure the
-  scoreboard in the CRCON UI. Playing Hell Let Loose: Vietnam? Also change
-  `HLL_GAME` to `hllv` on the backend service.
+<Accordion title="About the public scoreboard">
+  The scoreboard address shows data once you turn the scoreboard on inside the
+  CRCON admin UI. Playing Hell Let Loose: Vietnam? Also change `HLL_GAME` from
+  `hll` to `hllv` on the backend service.
 </Accordion>
 
 ## Next steps
 
 <CardGroup cols={3}>
+  <Card title="Add a custom domain" href="/guides/custom-domain">
+    Point a domain you own, at your new install. e.g. rcon.yourclan.com
+  </Card>
   <Card title="Add more servers" href="/guides/multi-server">
     Manage up to 10 game servers from this one install.
   </Card>
   <Card title="Troubleshooting" href="/guides/troubleshooting">
     What's normal on first boot, and what actually needs fixing.
-  </Card>
-  <Card title="Reference" href="/guides/architecture">
-    The architecture and every variable the template configures.
   </Card>
 </CardGroup>

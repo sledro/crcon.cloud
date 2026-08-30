@@ -1,80 +1,96 @@
 ---
-title: "Custom domain"
-description: "Serve your CRCON admin UI and public scoreboard from your own domain"
+title: "Use a custom domain"
+sidebarTitle: "Custom domain"
+description: "Point a domain you own, like rcon.yourclan.com, at your CRCON install"
 ---
 
-Out of the box your install lives on a generated
-`*.up.railway.app` domain. Pointing your own domain (say
-`rcon.example.com`) at it takes one change in Railway and two variable
-edits so Django trusts the new hostname.
-
-## Step 1: add the domain in Railway
+Out of the box your install lives on a Railway address like
+`frontend-production-89ee.up.railway.app`. If you own a domain, you can
+use something friendlier like `rcon.yourclan.com` instead. It takes
+about five minutes: one change in Railway, one at your domain provider,
+and two small edits so CRCON accepts the new address.
 
 <Steps>
-  <Step title="Add a custom domain to the frontend">
-    In your Railway project, open the **frontend** service, go to
-    **Settings, Networking**, and click **Custom Domain**. Enter your
-    domain (for example `rcon.example.com`) and pick target port
-    **80**.
+  <Step title="Add your domain in Railway">
+    Open the **frontend** service, go to **Settings, Networking**, and
+    click **+ Custom Domain**. Type your domain and enter port **80**,
+    then click **Add Domain**.
+
+    <Frame caption="Adding rcon.example.com on port 80">
+      <img src="/images/railway-add-domain.png" alt="Railway's Add Custom Domain form with a domain and port 80 filled in" />
+    </Frame>
+
   </Step>
-  <Step title="Create the DNS record">
-    Railway shows you a CNAME target. At your DNS provider, create a
-    CNAME record pointing your domain at that target. TLS is automatic;
-    Railway issues a certificate once it sees the DNS record, usually
-    within minutes.
+  <Step title="Copy the DNS records to your domain provider">
+    Railway shows you exactly which records to create:
+
+    <Frame caption="Railway tells you what to add at your domain provider">
+      <img src="/images/railway-dns-records.png" alt="Railway's Configure DNS Records dialog showing a CNAME and TXT record to create" />
+    </Frame>
+
+    Log in wherever you manage your domain (Cloudflare, Namecheap,
+    GoDaddy, ...), find the DNS settings, and add the records exactly
+    as shown. If your domain is on Cloudflare, the **Connect** button
+    can even do it for you.
+
+    That's all for the plumbing: the secure padlock (HTTPS) is set up
+    automatically. It usually goes live within a few minutes, sometimes
+    up to an hour depending on your provider.
 
     <Note>
-      Using Cloudflare? Both proxied (orange cloud) and DNS-only
-      records work, but with the proxy enabled set Cloudflare's
-      SSL/TLS mode to **Full** for the domain, or you'll get redirect
-      loops.
+      On Cloudflare with the orange cloud (proxy) turned on, also set
+      the domain's SSL/TLS mode to **Full**, or the page will loop
+      endlessly.
     </Note>
+
+  </Step>
+  <Step title="Tell CRCON about the new address">
+    CRCON only answers to addresses it knows. On the **backend**
+    service, open the **Variables** tab and make two edits:
+
+    1. Find `DOMAINS` and **add your domain to the end** of the list,
+       after a comma. Don't remove anything that's already there.
+       For example:
+       ```
+       ...,healthcheck.railway.app,rcon.yourclan.com
+       ```
+    2. Find `RCONWEB_EXTERNAL_ADDRESS` and **replace** its value with
+       your domain, for example `rcon.yourclan.com`.
+
+    Then make the same `RCONWEB_EXTERNAL_ADDRESS` change on the
+    **frontend** service's Variables tab.
+
+    <Warning>
+      Add to `DOMAINS`, never replace it. The entries already in the
+      list keep the install working; removing them breaks it.
+    </Warning>
+
+  </Step>
+  <Step title="Redeploy and log in">
+    Redeploy the **backend**, **frontend**, and **supervisor** services
+    (open each one, then the three-dot menu on its latest deployment,
+    then **Redeploy**). Once they're back online, log in at your new
+    address. Your old Railway address keeps working too, as a backup.
   </Step>
 </Steps>
 
-## Step 2: tell CRCON about the domain
+## A domain for the scoreboard too
 
-Django rejects requests for hostnames it doesn't know, so the login
-will 400 until the backend trusts the new domain. On the **backend**
-service's variables:
+Want `stats.yourclan.com` for the public scoreboard? Repeat step 1 and
+2 with that domain, entering port **81** instead. Nothing else needs
+changing; the scoreboard has no login.
 
-| Variable | Change |
-|---|---|
-| `DOMAINS` | **Append** your domain to the comma-separated list, keeping all existing entries, e.g. `...,healthcheck.railway.app,rcon.example.com` |
-| `RCONWEB_EXTERNAL_ADDRESS` | Replace the value with your domain, e.g. `rcon.example.com` |
+## One login across several game servers
 
-Then on the **frontend** service, set `RCONWEB_EXTERNAL_ADDRESS` to the
-same domain (it defaults to a reference to the generated Railway
-domain).
+Running [more than one game server](/guides/multi-server)? Give each
+frontend its own subdomain of the same domain (`rcon1.yourclan.com`,
+`rcon2.yourclan.com`), then add two variables on **every backend**:
 
-Redeploy the backend, frontend, and supervisor (the supervisor
-references the backend's value and picks it up on redeploy). Log in at
-your new domain.
+| Variable                | Value           |
+| ----------------------- | --------------- |
+| `SESSION_COOKIE_DOMAIN` | `.yourclan.com` |
+| `CSRF_COOKIE_DOMAIN`    | `.yourclan.com` |
 
-<Warning>
-  Append to `DOMAINS`, don't replace it. The list also contains the
-  private-network entry nginx proxies with and Railway's healthcheck
-  host; removing those breaks the deployment. Keeping the generated
-  `*.up.railway.app` entry costs nothing and leaves you a fallback URL.
-</Warning>
-
-## Public scoreboard on its own domain
-
-The public stats site is just port **81** on the same frontend. Repeat
-step 1 with a second custom domain (say `stats.example.com`) targeting
-port 81. Nothing else needs changing; the scoreboard doesn't do logins.
-
-## Single sign-on across multiple servers
-
-Running [several game servers](/guides/multi-server), each with its own
-frontend? Give them subdomains of one apex (`rcon1.example.com`,
-`rcon2.example.com`), then set on **every backend**:
-
-| Variable | Value |
-|---|---|
-| `SESSION_COOKIE_DOMAIN` | `.example.com` |
-| `CSRF_COOKIE_DOMAIN` | `.example.com` |
-
-Add each subdomain to its own backend's `DOMAINS`, and one login works
-across all of them. This is impossible on `*.up.railway.app` domains,
-which is the main reason to bother with custom domains at all.
+Also add each subdomain to its own backend's `DOMAINS` (step 3 above).
+Now logging in once logs you in everywhere. This only works with your
+own domain, which is one of the best reasons to set one up.

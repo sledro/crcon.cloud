@@ -1,8 +1,8 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "crcon.cloud",
-  "description": "One-click cloud hosting for CRCON, the community RCON tool for Hell Let Loose",
+  "name": "HLL CRCON Cloud",
+  "description": "One-click cloud admin panel hosting for CRCON, the community RCON tool for Hell Let Loose",
   "favicon": "/favicon.png",
   "logo": {
     "light": "/logo/light.svg",
